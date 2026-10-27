@@ -95,9 +95,17 @@ def start_daemon() -> None:
 
 
 def _daemon_pids() -> list[str]:
+    """找出本目录下 srun_daemon.py 的守护进程 PID。
+
+    只匹配完整脚本路径，避免误杀其他恰好引用了同名文件
+    （备份、日志、编辑器打开）的 python 进程。
+    PowerShell 的 -like 对反斜杠敏感，所以两边都归一成正斜杠再比。
+    """
+    target = str(DAEMON).replace("\\", "/")
     ps = (
         "Get-CimInstance Win32_Process -Filter \"Name='pythonw.exe' or Name='python.exe'\" | "
-        f"Where-Object {{ $_.CommandLine -like '*{DAEMON.name}*' }} | "
+        "Where-Object { ($_.CommandLine -replace '\\\\', '/') -like "
+        f"'*{target}*' }} | "
         "Select-Object -ExpandProperty ProcessId"
     )
     r = _run(["powershell", "-NoProfile", "-Command", ps])
