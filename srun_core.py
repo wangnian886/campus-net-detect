@@ -18,6 +18,7 @@ import os
 import re
 import socket
 import struct
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -205,14 +206,36 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
         ctypes.windll.kernel32.LocalFree(blob_out.pbData)
 
 
+def _restrict_to_current_user(path: Path) -> None:
+    """把文件权限收紧到仅当前用户（Windows 用 ACL，POSIX 用 chmod）。
+
+    DPAPI 已经加密了内容，但去掉其他用户的读权限可以防止他们把
+    cred.bin 拷到别处做离线尝试。失败不影响功能，只是少一层防护。
+    """
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    if os.name != "nt":
+        return
+    try:
+        user = os.environ.get("USERNAME", "")
+        if not user:
+            return
+        # /inheritance:r 断开继承，/grant:r 只给当前用户完全控制
+        subprocess.run(
+            ["icacls", str(path), "/inheritance:r",
+             "/grant:r", f"{user}:F"],
+            capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def save_credentials(username: str, password: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     payload = json.dumps({"username": username, "password": password}).encode()
     CRED_FILE.write_bytes(_dpapi(payload, protect=True))
-    try:
-        os.chmod(CRED_FILE, 0o600)
-    except OSError:
-        pass
+    _restrict_to_current_user(CRED_FILE)
 
 
 def load_credentials() -> tuple[str, str] | None:
