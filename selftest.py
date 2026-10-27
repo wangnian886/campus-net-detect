@@ -124,6 +124,18 @@ def _load_missing() -> bool:
         S.CRED_FILE = saved
 
 
+def test_masking() -> None:
+    """账号与 IP 脱敏：贴日志求助时不该泄漏完整学号。"""
+    m = S.mask_account("2024000000000")
+    check("账号脱敏保留首尾", m.startswith("2025") and m.endswith("10"), m)
+    check("账号脱敏中间被遮蔽", "*" in m and "2024000000000" not in m, m)
+    check("短账号也能脱敏", "*" in S.mask_account("abc123"), S.mask_account("abc123"))
+    check("空账号不报错", S.mask_account(None) == "(未知)")
+    ip = S.mask_ip("10.20.30.40")
+    check("IP 脱敏保留网段", ip == "10.20.*.*", ip)
+    check("空 IP 不报错", S.mask_ip(None) == "(未知)")
+
+
 def test_result_mapping() -> None:
     """认证返回码的判定分支。"""
     cases = [
@@ -204,6 +216,7 @@ def main(argv: list[str]) -> int:
     test_dpapi_roundtrip()
 
     print("== 结果判定 ==")
+    test_masking()
     test_result_mapping()
 
     print("== 链路探测 ==")

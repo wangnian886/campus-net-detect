@@ -130,7 +130,7 @@ def status() -> int:
     sys.path.insert(0, str(HERE))
     import srun_core as S
     creds = S.load_credentials()
-    print("凭据：", f"已保存（{creds[0]}）" if creds else "未配置，请运行 setup.cmd")
+    print("凭据：", f"已保存（{S.mask_account(creds[0])}）" if creds else "未配置，请运行 setup.cmd")
     print("门户在线：", "是" if S.online_info() else "否")
     print("外网：", "可达" if S.internet_ok() else "不可达")
     print(f"日志：{S.LOG_FILE}")

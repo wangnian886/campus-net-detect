@@ -486,6 +486,25 @@ def _verify_password() -> None:
         print("请到浏览器门户手动登录恢复网络，然后重新运行 setup.cmd。")
 
 
+def mask_account(name: str | None) -> str:
+    """脱敏账号，便于贴日志/截图求助时不泄漏学号。保留前 4 后 2。"""
+    if not name:
+        return "(未知)"
+    if len(name) <= 6:
+        return name[0] + "*" * (len(name) - 1)
+    return name[:4] + "*" * (len(name) - 6) + name[-2:]
+
+
+def mask_ip(ip: str | None) -> str:
+    """脱敏 IP，保留网段便于判断是否在校园网内。"""
+    if not ip:
+        return "(未知)"
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.{parts[1]}.*.*"
+    return "***"
+
+
 def main(argv: list[str]) -> int:
     cmd = argv[1] if len(argv) > 1 else "login"
 
@@ -500,7 +519,7 @@ def main(argv: list[str]) -> int:
     if cmd == "status":
         info = online_info()
         if info:
-            log(f"在线：{info.get('user_name')} @ {info.get('online_ip')} "
+            log(f"在线：{mask_account(info.get('user_name'))} @ {mask_ip(info.get('online_ip'))} "
                 f"余额 {info.get('user_balance')} 已用 {info.get('all_bytes')} 字节")
         else:
             log("未在线")
