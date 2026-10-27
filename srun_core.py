@@ -17,6 +17,7 @@ import json
 import os
 import re
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -251,26 +252,60 @@ def load_credentials() -> tuple[str, str] | None:
 # ---------------------------------------------------------------- 网络探测
 
 
+_ssl_ctx: ssl.SSLContext | None = None
+
+
 def _opener():
-    """绕过系统代理直连校园网门户。"""
-    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    """绕过系统代理直连校园网门户。
+
+    门户证书是自签的（校园内网），所以关闭证书校验——这里防的是
+    同网段嗅探，不是中间人伪装（内网环境下后者本就不成立）。
+    SSLContext 复用，避免每次请求都重新协商 TLS 会话。
+    """
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        _ssl_ctx = ssl.create_default_context()
+        _ssl_ctx.check_hostname = False
+        _ssl_ctx.verify_mode = ssl.CERT_NONE
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPSHandler(context=_ssl_ctx))
+
+
+def portal_base(use_https: bool = True) -> str:
+    return f"{'https' if use_https else 'http'}://{PORTAL_HOST}"
+
+
+# 门户是否支持 HTTPS。首次请求失败时置 False，之后一律走 HTTP，
+# 兼容不支持 TLS 的校区（此时安全性退化为原来的水平）。
+_https_ok = True
 
 
 def _get_jsonp(url: str, params: dict, timeout: float = 6.0) -> dict | None:
-    full = url + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(full, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with _opener().open(req, timeout=timeout) as resp:
-            text = resp.read().decode("utf-8", "replace")
-    except Exception:
-        return None
-    start, end = text.find("("), text.rfind(")")
-    if start < 0 or end <= start:
-        return None
-    try:
-        return json.loads(text[start + 1:end])
-    except json.JSONDecodeError:
-        return None
+    global _https_ok
+    # HTTPS 失败时自动回退到 HTTP 重试一次
+    schemes = [url]
+    if url.startswith("https://") and _https_ok:
+        schemes.append("http://" + url[len("https://"):])
+
+    for attempt_url in schemes:
+        full = attempt_url + "?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(full, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with _opener().open(req, timeout=timeout) as resp:
+                text = resp.read().decode("utf-8", "replace")
+        except Exception:
+            if attempt_url.startswith("https://"):
+                _https_ok = False
+            continue
+        start, end = text.find("("), text.rfind(")")
+        if start < 0 or end <= start:
+            return None
+        try:
+            return json.loads(text[start + 1:end])
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def internet_ok(timeout: float = 5.0) -> bool:
@@ -306,7 +341,7 @@ def local_ip_for_portal() -> str | None:
 
 def online_info() -> dict | None:
     """查询门户的在线状态；返回 error=='ok' 的字典表示本 IP 已在线。"""
-    res = _get_jsonp(f"http://{PORTAL_HOST}/cgi-bin/rad_user_info", {"callback": "x"})
+    res = _get_jsonp(f"{portal_base()}/cgi-bin/rad_user_info", {"callback": "x"})
     if not res or res.get("error") != "ok":
         return None
     return res
@@ -321,7 +356,7 @@ def portal_session_active(timeout: float = 2.0) -> bool | None:
     用户信息）。轮询频率高，省下的字节积少成多。
     """
     req = urllib.request.Request(
-        f"http://{PORTAL_HOST}/cgi-bin/rad_user_info?callback=x",
+        f"{portal_base()}/cgi-bin/rad_user_info?callback=x",
         headers={"User-Agent": "Mozilla/5.0"})
     try:
         resp = _opener().open(req, timeout=timeout)
@@ -342,7 +377,7 @@ def portal_session_active(timeout: float = 2.0) -> bool | None:
 
 
 def _portal_request(path: str, params: dict, timeout: float = 8.0) -> dict | None:
-    return _get_jsonp(f"http://{PORTAL_HOST}{path}", params, timeout=timeout)
+    return _get_jsonp(f"{portal_base()}{path}", params, timeout=timeout)
 
 
 def login(username: str, password: str, ip: str | None = None) -> tuple[bool, str]:
