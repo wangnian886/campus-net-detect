@@ -126,9 +126,10 @@ def _load_missing() -> bool:
 
 def test_masking() -> None:
     """账号与 IP 脱敏：贴日志求助时不该泄漏完整学号。"""
-    m = S.mask_account("2024000000000")
-    check("账号脱敏保留首尾", m.startswith("2025") and m.endswith("10"), m)
-    check("账号脱敏中间被遮蔽", "*" in m and "2024000000000" not in m, m)
+    sample = "2024000000000"
+    m = S.mask_account(sample)
+    check("账号脱敏保留首尾", m.startswith("2024") and m.endswith("00"), m)
+    check("账号脱敏中间被遮蔽", "*" in m and sample not in m, m)
     check("短账号也能脱敏", "*" in S.mask_account("abc123"), S.mask_account("abc123"))
     check("空账号不报错", S.mask_account(None) == "(未知)")
     ip = S.mask_ip("10.20.30.40")
