@@ -28,7 +28,7 @@ python install.py
 python install.py --status
 ```
 
-Windows 用户也可以直接双击 `设置密码.cmd`（会自动完成上述两步）。
+Windows 用户也可以直接双击 `setup.cmd`（会自动完成上述两步）。
 
 ## 常用命令
 
@@ -113,9 +113,28 @@ python install.py --uninstall   # 卸载：移除自启并停止守护进程
 | `srun_daemon.py` | 守护进程：三层探测 + 失败退避 + 密码保护 |
 | `install.py` | 安装/卸载开机自启（启动文件夹快捷方式，免管理员） |
 | `selftest.py` | 自检脚本 |
-| `js_ref_encoder.mjs` | 门户原版 JS 加密实现，仅用于交叉验证 |
-| `设置密码.cmd` | Windows 首次配置入口 |
+| `crypto_vectors.json` | 加密测试向量（回归用，不含门户原始代码） |
+| `setup.cmd` | Windows 首次配置入口 |
+
+## 致谢与协议来源
+
+深澜 Portal 的认证协议（XXTEA + 自定义 Base64 + MD5/SHA1 校验）是社区长期逆向
+得出的公开知识，本项目并未原创这套协议。相关参考实现包括：
+
+- [coffeehat/BIT-srun-login-script](https://github.com/coffeehat/BIT-srun-login-script)（MIT，2020）
+- [Mmx233/BitSrunLoginGo](https://github.com/Mmx233/BitSrunLoginGo)（AGPL-3.0）
+
+本项目的加密实现是依据门户页面 `Portal.js` 的行为重写的，并用固定测试向量
+（`crypto_vectors.json`）做回归验证，未复制上述项目的源代码，也不包含门户原始代码。
+
+相比上述项目，本项目的额外工作集中在**状态检测策略**与**运行可靠性**：三层探测
+降低开销、密码错误保护、凭据热更新、DPAPI 加密存储。
+
+## 免责声明
+
+仅供个人在自己的设备上自动完成已获授权的网络认证。请勿用于批量登录、
+绕过计费或其他违反学校网络使用规定的用途。使用风险自负。
 
 ## 许可
 
-MIT
+MIT，见 [LICENSE](LICENSE)。

@@ -111,7 +111,7 @@ def _is_password_error(reason: str) -> bool:
 def run_once(verbose: bool = True) -> tuple[bool, str]:
     creds = S.load_credentials()
     if not creds:
-        msg = "未配置凭据，请运行 设置密码.cmd"
+        msg = "未配置凭据，请运行 setup.cmd"
         if verbose:
             S.log(msg)
         return False, msg
@@ -184,7 +184,7 @@ def daemon_loop() -> int:
             next_external_check = 0.0
         had_link = link
 
-        # 用户重跑 设置密码.cmd 后（cred.bin 变化），恢复自动认证
+        # 用户重跑 setup.cmd 后（cred.bin 变化），恢复自动认证
         mtime = _cred_mtime()
         if mtime != cred_mtime:
             cred_mtime = mtime
@@ -224,7 +224,7 @@ def daemon_loop() -> int:
                 if _is_password_error(reason):
                     password_dead = True
                     S.log("密码错误（E2553），已停止自动重试以免账号被锁定。"
-                          "请重新运行 设置密码.cmd 输入正确密码，保存后本进程会自动恢复。")
+                          "请重新运行 setup.cmd 输入正确密码，保存后本进程会自动恢复。")
                 else:
                     # 开机/刚插网线时的失败多为瞬时（DHCP 未稳、门户未就绪），
                     # 早期用短间隔快速重试，之后指数退避避免打扰门户。

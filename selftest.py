@@ -33,31 +33,53 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 def test_crypto_against_js_reference() -> None:
-    """加密实现必须与门户 Portal.js 的原版实现逐字节一致。"""
-    ref = HERE / "js_ref_encoder.mjs"
+    """加密实现必须与固定测试向量一致（向量由与门户逐字节比对过的实现生成）。"""
+    ref = HERE / "crypto_vectors.json"
     if not ref.exists():
-        print("  SKIP  加密交叉验证（找不到 js_ref_encoder.mjs）")
+        print("  SKIP  加密向量验证（找不到 crypto_vectors.json）")
         return
-    token = "ede69a8e64d052d24dcec5f8f868361fd2aa4dd130f37255f74a994bd8dc7a3e"
-    cases = [
-        {"username": "2024000000000@uestc", "password": "TestPass123",
-         "ip": "10.20.30.40", "acid": "6", "enc_ver": "srun_bx1"},
-        {"username": "中文测试", "password": "p@ss!中文",
-         "ip": "10.0.0.1", "acid": "6", "enc_ver": "srun_bx1"},
-        {"username": "a@b", "password": "", "ip": "1.2.3.4",
-         "acid": "1", "enc_ver": "srun_bx1"},
-        {"username": "x" * 50, "password": "y" * 33,
-         "ip": "255.255.255.255", "acid": "66", "enc_ver": "srun_bx1"},
-    ]
-    for case in cases:
-        py = S.encode_user_info(case, token)
-        r = subprocess.run(
-            ["node", str(ref), token,
-             json.dumps(case, separators=(",", ":"), ensure_ascii=False)],
-            capture_output=True, text=True)
-        js = (r.stdout or "").strip()
-        check(f"info 编码一致: {case['username'][:16]!r}", py == js and js != "",
-              f"py={py[:40]} js={js[:40]}")
+    data = json.loads(ref.read_text(encoding="utf-8"))
+    for item in data["vectors"]:
+        case = item["input"]
+        got_info = S.encode_user_info(case, item["token"])
+        got_md5 = S.md5_password(case["password"], item["token"])
+        name = case["username"][:16]
+        check(f"info 编码: {name!r}", got_info == item["expect_info"],
+              f"got={got_info[:40]}")
+        check(f"密码 MD5: {name!r}", got_md5 == item["expect_md5"],
+              f"got={got_md5}")
+
+
+def test_js_utf16_packing() -> None:
+    """XXTEA 输入必须按 JS charCodeAt（UTF-16 码元）打包，不能按 UTF-8 字节。
+
+    纯 ASCII 时两种打包结果相同，所以这个 bug 只能被含中文的用例抓到——
+    单独测一次，避免将来只保留 ASCII 向量时静默回归。
+    """
+    import struct
+
+    def utf8_pack(text: str) -> list[int]:
+        b = text.encode()
+        n = (len(b) + 3) // 4
+        b += b"\0" * (n * 4 - len(b))
+        return list(struct.unpack("<%dI" % n, b))
+
+    # _js_pack 对纯 ASCII 应与 UTF-8 打包一致
+    check("_js_pack ASCII 与 UTF-8 打包一致",
+          S._js_pack("abcdefg") == utf8_pack("abcdefg"))
+    # 对中文必须不同（证明真的按 UTF-16 处理）
+    check("_js_pack 中文与 UTF-8 打包不同（按 UTF-16 处理）",
+          S._js_pack("中文测试") != utf8_pack("中文测试"),
+          "说明实现可能错误地按 UTF-8 打包")
+    # 中文密码的加密结果必须与向量一致（端到端）
+    ref = HERE / "crypto_vectors.json"
+    if ref.exists():
+        data = json.loads(ref.read_text(encoding="utf-8"))
+        zh = [v for v in data["vectors"] if any(ord(c) > 127 for c in v["input"]["username"])]
+        check("存在含中文的测试向量", bool(zh), "缺中文向量会让打包 bug 漏过")
+        for item in zh:
+            check(f"中文用例加密正确: {item['input']['username']!r}",
+                  S.encode_user_info(item["input"], item["token"]) == item["expect_info"])
 
 
 def test_md5_and_chksum() -> None:
@@ -176,6 +198,7 @@ def test_daemon_triggers() -> None:
 def main(argv: list[str]) -> int:
     print("== 协议实现 ==")
     test_crypto_against_js_reference()
+    test_js_utf16_packing()
     test_md5_and_chksum()
 
     print("== 凭据存储 ==")

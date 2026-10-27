@@ -1,0 +1,44 @@
+{
+ "_comment": "加密测试向量。期望值由与门户 Portal.js 逐字节比对通过的实现生成，用于回归验证，不含门户原始代码。注意：只有含中文的向量能抓到 「按 UTF-8 而非 UTF-16 打包」这个 bug——纯 ASCII 时两种打包结果相同。",
+ "vectors": [
+  {
+   "token": "token-A",
+   "input": {
+    "username": "2024000000000@uestc",
+    "password": "TestPass123",
+    "ip": "10.20.30.40",
+    "acid": "6",
+    "enc_ver": "srun_bx1"
+   },
+   "expect_info": "{SRBX1}SleMg/+I42p7xj6iuRABxyD9PDqRt7omtwSSJpOTjZpB0A0W0+bxNEmL7h8bHnVwVRmGRbEv4+8BVo9bUe7VfofTCpEKghRbE1ntuGQA4zm3WKUNomCJuBe3gaktOYRM1jsnRQylAgsJLAt9tkPxYBkeNjS=",
+   "expect_md5": "493c7016b5db786501cbf7a6cf01397d",
+   "note": "纯 ASCII，验证基本编码流程"
+  },
+  {
+   "token": "token-B",
+   "input": {
+    "username": "中文测试",
+    "password": "p@ss!中文",
+    "ip": "10.0.0.1",
+    "acid": "6",
+    "enc_ver": "srun_bx1"
+   },
+   "expect_info": "{SRBX1}PJQTiuw1eLN2eDX1ii840zTP1J1CgVGuE5+Vec58if9oTWl8kDEO8lJGXqRsfaA6X1NWWOtp9gBWq5tYLvCuooJ7SM1HabUGCFZAdtuxxzzSvtfNdtPrboOAbcS=",
+   "expect_md5": "815910fc9bdef9231e9c4fa4beaa6f65",
+   "note": "含中文，唯一能抓到「UTF-8 打包 vs UTF-16 打包」bug 的向量"
+  },
+  {
+   "token": "token-C",
+   "input": {
+    "username": "a@b",
+    "password": "",
+    "ip": "1.2.3.4",
+    "acid": "1",
+    "enc_ver": "srun_bx1"
+   },
+   "expect_info": "{SRBX1}0GufnFv8J331JvGklGuCi9kYALHgIQrpJeUkjPOYjxDEKAt+t0rWYD4KA4mfdUU8V34Pffma+UK0SWS0p5q0WtCtnt3CUMbdKspPFVE/2daALzNb",
+   "expect_md5": "55a1bb420474bc2d7750abe891220195",
+   "note": "最短输入，验证边界（空密码）"
+  }
+ ]
+}

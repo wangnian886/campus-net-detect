@@ -462,7 +462,7 @@ def _verify_password() -> None:
     _force_utf8_console()
     creds = load_credentials()
     if not creds:
-        print("尚未保存凭据，请先运行 设置密码.cmd")
+        print("尚未保存凭据，请先运行 setup.cmd")
         return
     if online_info() is None:
         print("当前未联网，无需登出，直接尝试认证…")
@@ -483,7 +483,7 @@ def _verify_password() -> None:
     ok, msg = ensure_online(*creds, verbose=True)
     print("验证通过：密码正确，自动连接可用。" if ok else f"验证失败：{msg}")
     if not ok:
-        print("请到浏览器门户手动登录恢复网络，然后重新运行 设置密码.cmd。")
+        print("请到浏览器门户手动登录恢复网络，然后重新运行 setup.cmd。")
 
 
 def main(argv: list[str]) -> int:
