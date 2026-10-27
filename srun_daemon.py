@@ -174,63 +174,71 @@ def daemon_loop() -> int:
     cred_mtime = _cred_mtime()
 
     while not stop["flag"]:
-        link = has_link()
+        # 单次迭代的任何意外异常都不能让守护进程退出——退出了就再也不会
+        # 自动重连，而且用户看不到任何提示。记录后继续下一轮。
+        try:
+            link = has_link()
 
-        # 链路刚出现（插网线/连上 Wi-Fi/唤醒）：等拿到 IP 就立即认证
-        if link and not had_link:
-            S.log("检测到网络连接")
-            wait_for_link(SETTLE_AFTER_LINK)
-            next_session_check = 0.0
-            next_external_check = 0.0
-        had_link = link
+            # 链路刚出现（插网线/连上 Wi-Fi/唤醒）：等拿到 IP 就立即认证
+            if link and not had_link:
+                S.log("检测到网络连接")
+                wait_for_link(SETTLE_AFTER_LINK)
+                next_session_check = 0.0
+                next_external_check = 0.0
+            had_link = link
 
-        # 用户重跑 setup.cmd 后（cred.bin 变化），恢复自动认证
-        mtime = _cred_mtime()
-        if mtime != cred_mtime:
-            cred_mtime = mtime
-            if password_dead:
-                S.log("检测到凭据已更新，恢复自动认证")
-            password_dead = False
-            fail_streak = 0
-            next_session_check = 0.0
-
-        if not link:
-            # 没插网线：什么都不做，静默等待
-            for _ in range(LINK_POLL * 4):
-                if stop["flag"]:
-                    break
-                time.sleep(0.25)
-            continue
-
-        now = time.monotonic()
-
-        # 兜底校验：门户说在线，但偶尔也要真连一次外网，
-        # 排除「会话在、网关不通」这类边界。频率低，流量可忽略。
-        if now >= next_external_check:
-            next_external_check = now + EXTERNAL_POLL
-            if session_state() is True and not S.internet_ok():
-                S.log("门户会话仍在但外网不通，重新认证")
+            # 用户重跑 setup.cmd 后（cred.bin 变化），恢复自动认证
+            mtime = _cred_mtime()
+            if mtime != cred_mtime:
+                cred_mtime = mtime
+                if password_dead:
+                    S.log("检测到凭据已更新，恢复自动认证")
+                password_dead = False
+                fail_streak = 0
                 next_session_check = 0.0
 
-        if not password_dead and now >= next_session_check:
-            next_session_check = now + SESSION_POLL
-            ok, actionable, reason = try_authenticate()
-            if ok:
-                if fail_streak:
-                    S.log("已恢复联网")
-                fail_streak = 0
-            elif actionable:
-                fail_streak += 1
-                if _is_password_error(reason):
-                    password_dead = True
-                    S.log("密码错误（E2553），已停止自动重试以免账号被锁定。"
-                          "请重新运行 setup.cmd 输入正确密码，保存后本进程会自动恢复。")
-                else:
-                    # 开机/刚插网线时的失败多为瞬时（DHCP 未稳、门户未就绪），
-                    # 早期用短间隔快速重试，之后指数退避避免打扰门户。
-                    backoff = min(10 * (2 ** min(fail_streak - 1, 5)), FAIL_BACKOFF_MAX)
-                    S.log(f"认证未成功（第 {fail_streak} 次）：{reason}；{backoff} 秒后重试")
-                    next_session_check = time.monotonic() + backoff
+            if not link:
+                # 没插网线：什么都不做，静默等待
+                for _ in range(LINK_POLL * 4):
+                    if stop["flag"]:
+                        break
+                    time.sleep(0.25)
+                continue
+
+            now = time.monotonic()
+
+            # 兜底校验：门户说在线，但偶尔也要真连一次外网，
+            # 排除「会话在、网关不通」这类边界。频率低，流量可忽略。
+            if now >= next_external_check:
+                next_external_check = now + EXTERNAL_POLL
+                if session_state() is True and not S.internet_ok():
+                    S.log("门户会话仍在但外网不通，重新认证")
+                    next_session_check = 0.0
+
+            if not password_dead and now >= next_session_check:
+                next_session_check = now + SESSION_POLL
+                ok, actionable, reason = try_authenticate()
+                if ok:
+                    if fail_streak:
+                        S.log("已恢复联网")
+                    fail_streak = 0
+                elif actionable:
+                    fail_streak += 1
+                    if _is_password_error(reason):
+                        password_dead = True
+                        S.log("密码错误（E2553），已停止自动重试以免账号被锁定。"
+                              "请重新运行 setup.cmd 输入正确密码，保存后本进程会自动恢复。")
+                    else:
+                        # 开机/刚插网线时的失败多为瞬时（DHCP 未稳、门户未就绪），
+                        # 早期用短间隔快速重试，之后指数退避避免打扰门户。
+                        backoff = min(10 * (2 ** min(fail_streak - 1, 5)), FAIL_BACKOFF_MAX)
+                        S.log(f"认证未成功（第 {fail_streak} 次）：{reason}；{backoff} 秒后重试")
+                        next_session_check = time.monotonic() + backoff
+        except Exception as exc:
+            # 只记录异常类型与消息，不打印 traceback 里的请求 URL（含账号）。
+            S.log(f"守护进程遇到异常，已跳过本轮：{type(exc).__name__}: {exc}")
+            fail_streak = 0
+            next_session_check = time.monotonic() + SESSION_POLL
 
         for _ in range(LINK_POLL * 4):
             if stop["flag"]:

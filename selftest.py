@@ -171,6 +171,15 @@ def _is_bad_ip(ip: str) -> bool:
     return ip.startswith("127.") or ip.startswith("169.254.")
 
 
+def test_loop_survives_exception() -> None:
+    """主循环必须能吞下意外异常——退出了就再也不会自动重连。"""
+    src = (HERE / "srun_daemon.py").read_text(encoding="utf-8")
+    start = src.index('while not stop["flag"]:')
+    body = src[start:src.index('S.log("守护进程退出")')]
+    check("主循环有异常兜底", "except Exception" in body,
+          "循环体缺少 try/except，意外异常会让守护进程静默退出")
+
+
 def test_daemon_triggers() -> None:
     """守护进程触发判定：断网且门户可达要认证；没插网线要静默；已联网不打扰。"""
     orig_session, orig_run = D.session_state, D.run_once
@@ -222,6 +231,8 @@ def main(argv: list[str]) -> int:
     print("== 链路探测 ==")
     test_link_probe()
 
+    print("== 守护进程健壮性 ==")
+    test_loop_survives_exception()
     print("== 守护进程触发 ==")
     test_daemon_triggers()
 
